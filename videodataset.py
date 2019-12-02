@@ -11,12 +11,41 @@ import cv2
 import matplotlib.pyplot as plt
 from config import *
 
-vidPaths = np.array(glob2.glob(virat.ground.video.dir + '/*.mp4'))
 
-vid = cv2.VideoCapture(vidPaths[0])
-totalFrames = vid.get(cv2.CAP_PROP_FRAME_COUNT)
-print(totalFrames)
-frameNumber = 3000
-vid.set(cv2.CAP_PROP_POS_FRAMES, frameNumber)
-ret, frame = vid.read()
-plt.imshow(frame)
+def _preprocess_image(feature):
+	img = feature['image']
+	img = tf.cast(img, tf.float32)
+	img /= 255.0
+	feature['image'] = img
+	return feature
+
+
+class FrameGenerator():
+	def __init__(self, videoPaths):
+		self.videoPaths = videoPaths
+		self.videos = [cv2.VideoCapture(path) for path in videoPaths]
+		self.totalFrames = np.array([vid.get(cv2.CAP_PROP_FRAME_COUNT) for vid in self.videos]).astype(np.int)
+
+	def call(self):
+		while True:
+			# let's just use the first video for testing:
+			i_vid = 0
+			vid = self.videos[i_vid]
+			idx_frame = np.random.choice(self.totalFrames[i_vid], self.totalFrames[i_vid], replace=True)
+			for i_frame in idx_frame:
+				vid.set(cv2.CAP_PROP_POS_FRAMES, i_frame) # set video to this frame
+				yield {
+					'video_index': i_vid,
+					'video_path': self.videoPaths[i_vid],
+					'frame': vid.read()[1]
+				}
+
+if __name__ == "__main__":
+	videoPaths = np.array(glob2.glob(virat.ground.video.dir + '/*.mp4'))
+	generator = FrameGenerator(videoPaths)
+	
+	dataset = tf.data.Dataset.from_generator(generator.call, output_types={'video_index': tf.float32, 'video_path': tf.string, 'frame': tf.uint8})
+	for sample in dataset.take(3):
+		plt.figure()
+		plt.title(f"index: {sample['video_index'].numpy()}, path: {sample['video_path'].numpy()}")
+		plt.imshow(sample['frame'])
