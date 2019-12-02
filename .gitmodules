@@ -1,0 +1,3 @@
+[submodule "srgan"]
+	path = srgan
+	url = ./srgan
