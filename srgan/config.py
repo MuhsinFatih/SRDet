@@ -11,8 +11,8 @@ config.TRAIN.beta1 = 0.9
 
 ## initialize G
 config.TRAIN.n_epoch_init = 100
-    # config.TRAIN.lr_decay_init = 0.1
-    # config.TRAIN.decay_every_init = int(config.TRAIN.n_epoch_init / 2)
+	# config.TRAIN.lr_decay_init = 0.1
+	# config.TRAIN.decay_every_init = int(config.TRAIN.n_epoch_init / 2)
 
 ## adversarial learning (SRGAN)
 config.TRAIN.n_epoch = 2000
@@ -29,7 +29,7 @@ config.VALID.hr_img_path = 'DIV2K/DIV2K_valid_HR/'
 config.VALID.lr_img_path = 'DIV2K/DIV2K_valid_LR_bicubic/X4/'
 
 def log_config(filename, cfg):
-    with open(filename, 'w') as f:
-        f.write("================================================\n")
-        f.write(json.dumps(cfg, indent=4))
-        f.write("\n================================================\n")
+	with open(filename, 'w') as f:
+		f.write("================================================\n")
+		f.write(json.dumps(cfg, indent=4))
+		f.write("\n================================================\n")
