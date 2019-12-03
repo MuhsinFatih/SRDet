@@ -1,5 +1,6 @@
 #! /usr/bin/python
 # -*- coding: utf8 -*-
+#%%
 
 import os
 import time
@@ -10,6 +11,12 @@ import tensorflow as tf
 import tensorlayer as tl
 from model import get_G, get_D
 from config import config
+
+import sys
+sys.path.append('..')
+import videodataset
+from config2 import *
+import glob2
 
 ###====================== HYPER-PARAMETERS ===========================###
 ## Adam
@@ -34,13 +41,13 @@ tl.files.exists_or_mkdir(checkpoint_dir)
 
 def get_train_data():
 	# load dataset
-	train_hr_img_list = sorted(tl.files.load_file_list(path=config.TRAIN.hr_img_path, regx='.*.png', printable=False))#[0:20]
+	# train_hr_img_list = sorted(tl.files.load_file_list(path=config.TRAIN.hr_img_path, regx='.*.png', printable=False))#[0:20]
 		# train_lr_img_list = sorted(tl.files.load_file_list(path=config.TRAIN.lr_img_path, regx='.*.png', printable=False))
 		# valid_hr_img_list = sorted(tl.files.load_file_list(path=config.VALID.hr_img_path, regx='.*.png', printable=False))
 		# valid_lr_img_list = sorted(tl.files.load_file_list(path=config.VALID.lr_img_path, regx='.*.png', printable=False))
 
 	## If your machine have enough memory, please pre-load the entire train set.
-	train_hr_imgs = tl.vis.read_images(train_hr_img_list, path=config.TRAIN.hr_img_path, n_threads=32)
+	# train_hr_imgs = tl.vis.read_images(train_hr_img_list, path=config.TRAIN.hr_img_path, n_threads=32)
 		# for im in train_hr_imgs:
 		#     print(im.shape)
 		# valid_lr_imgs = tl.vis.read_images(valid_lr_img_list, path=config.VALID.lr_img_path, n_threads=32)
@@ -51,9 +58,15 @@ def get_train_data():
 		#     print(im.shape)
 		
 	# dataset API and augmentation
-	def generator_train():
-		for img in train_hr_imgs:
-			yield img
+	# def generator_train():
+	# 	for img in train_hr_imgs:
+	# 		yield img
+
+	videoPaths = np.array(glob2.glob(virat.ground.video.dir + '/*.mp4'))
+	generator = videodataset.FrameGenerator(videoPaths)
+	
+
+	
 	def _map_fn_train(img):
 		hr_patch = tf.image.random_crop(img, [384, 384, 3])
 		hr_patch = hr_patch / (255. / 2.)
@@ -63,7 +76,10 @@ def get_train_data():
 		return lr_patch, hr_patch
 
 	
-	train_ds = tf.data.Dataset.from_generator(generator_train, output_types=(tf.float32))
+	train_ds = tf.data.Dataset.from_generator(generator.call, output_types=(tf.float32))
+	# train_ds = tf.data.Dataset.from_generator(generator_train, output_types=(tf.float32))
+	# print(next(iter(train_ds)).numpy())
+	# return
 	train_ds = train_ds.map(_map_fn_train, num_parallel_calls=multiprocessing.cpu_count())
 		# train_ds = train_ds.repeat(n_epoch_init + n_epoch)
 	train_ds = train_ds.shuffle(shuffle_buffer_size)
