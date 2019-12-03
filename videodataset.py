@@ -34,11 +34,12 @@ class FrameGenerator():
 			idx_frame = np.random.choice(self.totalFrames[i_vid], self.totalFrames[i_vid], replace=True)
 			for i_frame in idx_frame:
 				vid.set(cv2.CAP_PROP_POS_FRAMES, i_frame) # set video to this frame
-				yield {
-					'video_index': i_vid,
-					'video_path': self.videoPaths[i_vid],
-					'frame': vid.read()[1]
-				}
+				# yield {
+				# 	'video_index': i_vid,
+				# 	'video_path': self.videoPaths[i_vid],
+				# 	'frame': vid.read()[1]
+				# }
+				yield vid.read()[1]
 
 if __name__ == "__main__":
 	videoPaths = np.array(glob2.glob(virat.ground.video.dir + '/*.mp4'))
