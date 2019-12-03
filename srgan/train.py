@@ -63,7 +63,7 @@ def get_train_data():
 	# 		yield img
 
 	videoPaths = np.array(glob2.glob(virat.ground.video.dir + '/*.mp4'))
-	generator = videodataset.FrameGenerator(videoPaths)
+	generator = videodataset.FrameGenerator(videoPaths, iteration_size=12)
 	
 
 	
