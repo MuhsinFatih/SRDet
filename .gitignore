@@ -144,3 +144,4 @@ Untitled*.ipynb
 srgan/models/*
 
 container/
+outputs/
