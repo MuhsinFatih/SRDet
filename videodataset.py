@@ -26,23 +26,26 @@ class FrameGenerator():
 		self.videos = [cv2.VideoCapture(path) for path in videoPaths]
 		self.totalFrames = np.array([vid.get(cv2.CAP_PROP_FRAME_COUNT) for vid in self.videos]).astype(np.int)
 		self.iteration_size = iteration_size
+		self.ind_vid = np.arange(len(self.videos[:-1])) # keep the last as test set
+		np.random.seed(0)
+		np.random.shuffle(self.ind_vid)
+		self.i_vid = 0
 	def call(self):
-		ind_vid = np.arange(len(self.videos[:-1])) # keep the last as test set
-		# np.random.shuffle(ind_vid)
-		i_vid = 0 # temporary
-		for _ in range(96):
-			vid = self.videos[i_vid]
-			idx_frame = np.random.choice(self.totalFrames[i_vid], self.totalFrames[i_vid], replace=True)
-			for i in range(self.iteration_size):
-				vid.set(cv2.CAP_PROP_POS_FRAMES, idx_frame[i]) # set video to this frame
-				# yield {
-				# 	'video_index': i_vid,
-				# 	'video_path': self.videoPaths[i_vid],
-				# 	'frame': vid.read()[1]
-				# }
-				img = vid.read()[1]
-				img = cv2.blur(img,(5,5))
-				yield img
+		vid = self.videos[self.i_vid]
+		n_frames = min(self.iteration_size, self.totalFrames[self.i_vid])
+		idx_frame = np.random.choice(self.totalFrames[self.i_vid], n_frames, replace=False) # random n frames that are different than each other
+		for i in range(self.iteration_size):
+			vid.set(cv2.CAP_PROP_POS_FRAMES, idx_frame[i]) # set video to this frame
+			# yield {
+			# 	'video_index': i_vid,
+			# 	'video_path': self.videoPaths[i_vid],
+			# 	'frame': vid.read()[1]
+			# }
+			img = vid.read()[1]
+			img = cv2.blur(img,(5,5))
+			yield img
+		self.i_vid += 1
+		
 
 if __name__ == "__main__":
 	videoPaths = np.array(glob2.glob(virat.ground.video.dir + '/*.mp4'))

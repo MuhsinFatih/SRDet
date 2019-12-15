@@ -22,6 +22,7 @@ from scipy.misc import imsave
 from PIL import Image
 import PIL
 import pathlib
+AUTOTUNE = tf.data.experimental.AUTOTUNE
 
 ###====================== HYPER-PARAMETERS ===========================###
 ## Adam
@@ -35,7 +36,7 @@ n_epoch = config.TRAIN.n_epoch
 lr_decay = config.TRAIN.lr_decay
 decay_every = config.TRAIN.decay_every
 shuffle_buffer_size = 128
-
+iteration_size = 96
 # ni = int(np.sqrt(batch_size))
 
 import argparse
@@ -48,13 +49,13 @@ parser.add_argument('--inputsize', type=int, default=96)
 args = parser.parse_args()
 
 inputsize = args.inputsize
-outdir = job(f'{args.exp} {args.inputsize}')
+outdir = job(f'{args.exp}')
 
 # create folders to save result images and trained models
 save_dir = os.path.join(outdir, "samples")
 tl.files.exists_or_mkdir(save_dir)
-# checkpoint_dir = os.path.join(outdir, "models")
-checkpoint_dir = "models"
+checkpoint_dir = os.path.join(outdir, "models")
+# checkpoint_dir = "models"
 tl.files.exists_or_mkdir(checkpoint_dir)
 
 def get_train_data():
@@ -81,7 +82,7 @@ def get_train_data():
 	# 		yield img
 
 	videoPaths = np.array(glob2.glob(virat.ground.video.dir + '/*.mp4'))
-	generator = videodataset.FrameGenerator(videoPaths, iteration_size=12)
+	generator = videodataset.FrameGenerator(videoPaths, iteration_size)
 
 	def _map_fn_train(img):
 		hr_patch = tf.image.random_crop(img, [384, 384, 3])
@@ -89,6 +90,7 @@ def get_train_data():
 		hr_patch = hr_patch - 1.
 		hr_patch = tf.image.random_flip_left_right(hr_patch)
 		lr_patch = tf.image.resize(hr_patch, size=[inputsize, inputsize]) #64, 48, 36
+		lr_patch = tf.image.resize(lr_patch, size=[96, 96]) # re-upsample if it was lower than this. 96x96 is the input size of the network
 		return lr_patch, hr_patch
 	
 	train_ds = tf.data.Dataset.from_generator(generator.call, output_types=(tf.float32))
@@ -97,7 +99,7 @@ def get_train_data():
 	# return
 	example = next(iter(train_ds))
 	imsave(os.path.join(outdir,"input_example.jpg"), example.numpy())
-	train_ds = train_ds.map(_map_fn_train, num_parallel_calls=multiprocessing.cpu_count())
+	train_ds = train_ds.map(_map_fn_train, num_parallel_calls=AUTOTUNE)
 	examples = next(iter(train_ds))
 	print(examples[1].numpy().shape)
 	imsave(os.path.join(outdir,"lowres_example.jpg"), examples[0].numpy())
@@ -105,7 +107,7 @@ def get_train_data():
 
 		# train_ds = train_ds.repeat(n_epoch_init + n_epoch)
 	train_ds = train_ds.shuffle(shuffle_buffer_size)
-	train_ds = train_ds.prefetch(buffer_size=2)
+	train_ds = train_ds.prefetch(AUTOTUNE)
 	train_ds = train_ds.batch(batch_size)
 		# value = train_ds.make_one_shot_iterator().get_next()
 	return train_ds
@@ -127,24 +129,25 @@ def train():
 	train_ds = get_train_data()
 
 	## initialize learning (G)
-	n_step_epoch = round(n_epoch_init // batch_size)
-	for epoch in range(n_epoch_init):
-		for step, (lr_patchs, hr_patchs) in enumerate(train_ds):
-			if lr_patchs.shape[0] != batch_size: # if the remaining data in this epoch < batch_size
-				break
-			step_time = time.time()
-			with tf.GradientTape() as tape:
-				fake_hr_patchs = G(lr_patchs)
-				mse_loss = tl.cost.mean_squared_error(fake_hr_patchs, hr_patchs, is_mean=True)
-			grad = tape.gradient(mse_loss, G.trainable_weights)
-			g_optimizer_init.apply_gradients(zip(grad, G.trainable_weights))
-			print("Epoch: [{}/{}] step: [{}/{}] time: {:.3f}s, mse: {:.3f} ".format(
-				epoch, n_epoch_init, step, n_step_epoch, time.time() - step_time, mse_loss))
-		if (epoch != 0) and (epoch % 10 == 0):
-			tl.vis.save_images(fake_hr_patchs.numpy(), [2, 4], os.path.join(save_dir, 'train_g_init_{}.png'.format(epoch)))
+	# n_step_epoch = round(n_epoch_init // batch_size)
+	# for epoch in range(n_epoch_init):
+	# 	for step, (lr_patchs, hr_patchs) in enumerate(train_ds):
+	# 		print('lr_patchs.shape: ', lr_patchs.shape, 'batch_size:', batch_size)
+	# 		if lr_patchs.shape[0] != batch_size: # if the remaining data in this epoch < batch_size
+	# 			break
+	# 		step_time = time.time()
+	# 		with tf.GradientTape() as tape:
+	# 			fake_hr_patchs = G(lr_patchs)
+	# 			mse_loss = tl.cost.mean_squared_error(fake_hr_patchs, hr_patchs, is_mean=True)
+	# 		grad = tape.gradient(mse_loss, G.trainable_weights)
+	# 		g_optimizer_init.apply_gradients(zip(grad, G.trainable_weights))
+	# 		print("Epoch: [{}/{}] step: [{}/{}] time: {:.3f}s, mse: {:.3f} ".format(
+	# 			epoch, n_epoch_init, step, n_step_epoch, time.time() - step_time, mse_loss))
+	# 	if (epoch != 0) and (epoch % 10 == 0):
+	# 		tl.vis.save_images(fake_hr_patchs.numpy(), [2, 4], os.path.join(save_dir, 'train_g_init_{}.png'.format(epoch)))
 
 	## adversarial learning (G, D)
-	n_step_epoch = round(n_epoch // batch_size)
+	n_step_epoch = round(iteration_size // batch_size)
 	for epoch in range(n_epoch):
 		for step, (lr_patchs, hr_patchs) in enumerate(train_ds):
 			if lr_patchs.shape[0] != batch_size: # if the remaining data in this epoch < batch_size
@@ -168,7 +171,7 @@ def train():
 			grad = tape.gradient(d_loss, D.trainable_weights)
 			d_optimizer.apply_gradients(zip(grad, D.trainable_weights))
 			print("Epoch: [{}/{}] step: [{}/{}] time: {:.3f}s, g_loss(mse:{:.3f}, vgg:{:.3f}, adv:{:.3f}) d_loss: {:.3f}".format(
-				epoch, n_epoch_init, step, n_step_epoch, time.time() - step_time, mse_loss, vgg_loss, g_gan_loss, d_loss))
+				epoch, n_epoch, step, n_step_epoch, time.time() - step_time, mse_loss, vgg_loss, g_gan_loss, d_loss))
 
 		# update the learning rate
 		if epoch != 0 and (epoch % decay_every == 0):
@@ -178,6 +181,7 @@ def train():
 			print(log)
 
 		if (epoch != 0) and (epoch % 10 == 0):
+			tl.vis.save_images(lr_patchs.numpy(), [2, 4], os.path.join(save_dir, 'inputs_{}.png'.format(epoch)))
 			tl.vis.save_images(fake_patchs.numpy(), [2, 4], os.path.join(save_dir, 'train_g_{}.png'.format(epoch)))
 			G.save_weights(os.path.join(checkpoint_dir, 'g.h5'))
 			D.save_weights(os.path.join(checkpoint_dir, 'd.h5'))
@@ -185,7 +189,7 @@ def __evaluate(ds_lowres, ds_highres):
 	G = get_G([1, None, None, 3])
 	G.load_weights(os.path.join(checkpoint_dir, 'g.h5'))
 	G.eval()
-	
+
 	for i,valid_lr_img in enumerate(ds_lowres):
 		valid_lr_img = valid_lr_img.numpy() #[img[1].numpy() for img in next(iter(ds_lowres.take(65)))]
 
@@ -221,11 +225,11 @@ def evaluate():
 			img = img / (255. / 2.)
 			img = img - 1.
 			return img
-		ds_lowres = path_ds.map(_map_fn_test, num_parallel_calls=multiprocessing.cpu_count())
+		ds_lowres = path_ds.map(_map_fn_test, num_parallel_calls=AUTOTUNE)
 		ds_highres = None
 	else:
 		videoPaths = np.array(glob2.glob(virat.ground.video.dir + '/*.mp4'))
-		generator = videodataset.FrameGenerator(videoPaths, iteration_size=12)
+		generator = videodataset.FrameGenerator(videoPaths, iteration_size)
 
 		def _map_fn_train(img):
 			hr_patch = tf.image.random_crop(img, [384, 384, 3])
@@ -236,7 +240,7 @@ def evaluate():
 		
 		ds_lowres = tf.data.Dataset.from_generator(generator.call, output_types=(tf.float32))
 		ds_highres = tf.data.Dataset.from_generator(generator.call, output_types=(tf.float32))
-		ds_lowres = ds_lowres.map(_map_fn_train, num_parallel_calls=multiprocessing.cpu_count())
+		ds_lowres = ds_lowres.map(_map_fn_train, num_parallel_calls=AUTOTUNE)
 	__evaluate(ds_lowres, ds_highres)
 
 if __name__ == '__main__':
