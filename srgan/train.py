@@ -18,6 +18,10 @@ import videodataset
 from config2 import *
 import glob2
 
+from scipy.misc import imsave
+from PIL import Image
+import PIL
+
 ###====================== HYPER-PARAMETERS ===========================###
 ## Adam
 batch_size = config.TRAIN.batch_size  # use 8 if your GPU memory is small, and change [4, 4] in tl.vis.save_images to [2, 4]
@@ -33,9 +37,21 @@ shuffle_buffer_size = 128
 
 # ni = int(np.sqrt(batch_size))
 
+import argparse
+parser = argparse.ArgumentParser()
+
+parser.add_argument('--mode', type=str, default='srgan', help='srgan, evaluate')
+parser.add_argument('--inputsize', type=int, default=96)
+
+args = parser.parse_args()
+
+inputsize = args.inputsize
+outdir = job(f'training{args.inputsize}')
+
 # create folders to save result images and trained models
-save_dir = "samples"
+save_dir = os.path.join(outdir, "samples")
 tl.files.exists_or_mkdir(save_dir)
+# checkpoint_dir = os.path.join(outdir, "models")
 checkpoint_dir = "models"
 tl.files.exists_or_mkdir(checkpoint_dir)
 
@@ -64,23 +80,27 @@ def get_train_data():
 
 	videoPaths = np.array(glob2.glob(virat.ground.video.dir + '/*.mp4'))
 	generator = videodataset.FrameGenerator(videoPaths, iteration_size=12)
-	
 
-	
 	def _map_fn_train(img):
 		hr_patch = tf.image.random_crop(img, [384, 384, 3])
 		hr_patch = hr_patch / (255. / 2.)
 		hr_patch = hr_patch - 1.
 		hr_patch = tf.image.random_flip_left_right(hr_patch)
-		lr_patch = tf.image.resize(hr_patch, size=[96, 96])
+		lr_patch = tf.image.resize(hr_patch, size=[inputsize, inputsize]) #64, 48, 36
 		return lr_patch, hr_patch
-
 	
 	train_ds = tf.data.Dataset.from_generator(generator.call, output_types=(tf.float32))
 	# train_ds = tf.data.Dataset.from_generator(generator_train, output_types=(tf.float32))
 	# print(next(iter(train_ds)).numpy())
 	# return
+	example = next(iter(train_ds))
+	imsave(os.path.join(outdir,"input_example.jpg"), example.numpy())
 	train_ds = train_ds.map(_map_fn_train, num_parallel_calls=multiprocessing.cpu_count())
+	examples = next(iter(train_ds))
+	print(examples[1].numpy().shape)
+	imsave(os.path.join(outdir,"lowres_example.jpg"), examples[0].numpy())
+	imsave(os.path.join(outdir,"highres_example.jpg"), examples[1].numpy())
+
 		# train_ds = train_ds.repeat(n_epoch_init + n_epoch)
 	train_ds = train_ds.shuffle(shuffle_buffer_size)
 	train_ds = train_ds.prefetch(buffer_size=2)
@@ -159,50 +179,8 @@ def train():
 			tl.vis.save_images(fake_patchs.numpy(), [2, 4], os.path.join(save_dir, 'train_g_{}.png'.format(epoch)))
 			G.save_weights(os.path.join(checkpoint_dir, 'g.h5'))
 			D.save_weights(os.path.join(checkpoint_dir, 'd.h5'))
-
-def evaluate():
-	###====================== PRE-LOAD DATA ===========================###
-	# train_hr_img_list = sorted(tl.files.load_file_list(path=config.TRAIN.hr_img_path, regx='.*.png', printable=False))
-	# train_lr_img_list = sorted(tl.files.load_file_list(path=config.TRAIN.lr_img_path, regx='.*.png', printable=False))
-	# valid_hr_img_list = sorted(tl.files.load_file_list(path=config.VALID.hr_img_path, regx='.*.png', printable=False))
-	# valid_lr_img_list = sorted(tl.files.load_file_list(path=config.VALID.lr_img_path, regx='.*.png', printable=False))
-
-	## if your machine have enough memory, please pre-load the whole train set.
-	# train_hr_imgs = tl.vis.read_images(train_hr_img_list, path=config.TRAIN.hr_img_path, n_threads=32)
-	# for im in train_hr_imgs:
-	#     print(im.shape)
-	# valid_lr_imgs = tl.vis.read_images(valid_lr_img_list, path=config.VALID.lr_img_path, n_threads=32)
-	# for im in valid_lr_imgs:
-	#     print(im.shape)
-	# valid_hr_imgs = tl.vis.read_images(valid_hr_img_list, path=config.VALID.hr_img_path, n_threads=32)
-	# for im in valid_hr_imgs:
-	#     print(im.shape)
-
-	videoPaths = np.array(glob2.glob(virat.ground.video.dir + '/*.mp4'))
-	generator = videodataset.FrameGenerator(videoPaths, iteration_size=12)
-
-	def _map_fn_train(img):
-		hr_patch = tf.image.random_crop(img, [384, 384, 3])
-		hr_patch = hr_patch / (255. / 2.)
-		hr_patch = hr_patch - 1.
-		hr_patch = tf.image.random_flip_left_right(hr_patch)
-		lr_patch = tf.image.resize(hr_patch, size=[96, 96])
-		return lr_patch, hr_patch
-	
-	ds_lowres = tf.data.Dataset.from_generator(generator.call, output_types=(tf.float32))
-	ds_highres = tf.data.Dataset.from_generator(generator.call, output_types=(tf.float32))
-	ds_lowres = ds_lowres.map(_map_fn_train, num_parallel_calls=multiprocessing.cpu_count())
-	valid_hr_imgs = [next(iter(ds_highres))[1].numpy()] #[img[1].numpy() for img in next(iter(ds_highres.take(65)))]
-	valid_lr_imgs = [next(iter(ds_lowres))[1].numpy()] #[img[1].numpy() for img in next(iter(ds_lowres.take(65)))]
-	print('valid_lr_imgs: ', valid_lr_imgs)
-
-	###========================== DEFINE MODEL ============================###
-	imid = 0  # 0: 企鹅  81: 蝴蝶 53: 鸟  64: 古堡
-	valid_lr_img = valid_lr_imgs[imid]
-	valid_hr_img = valid_hr_imgs[imid]
-	# valid_lr_img = get_imgs_fn('test.png', 'data2017/')  # if you want to test your own image
-	valid_lr_img = (valid_lr_img / 127.5) - 1  # rescale to ［－1, 1]
-	# print(valid_lr_img.min(), valid_lr_img.max())
+def __evaluate(ds_lowres, ds_highres):
+	valid_lr_img = next(iter(ds_lowres)).numpy() #[img[1].numpy() for img in next(iter(ds_lowres.take(65)))]
 
 	G = get_G([1, None, None, 3])
 	G.load_weights(os.path.join(checkpoint_dir, 'g.h5'))
@@ -218,20 +196,43 @@ def evaluate():
 	print("[*] save images")
 	tl.vis.save_image(out[0], os.path.join(save_dir, 'valid_gen.png'))
 	tl.vis.save_image(valid_lr_img[0], os.path.join(save_dir, 'valid_lr.png'))
-	tl.vis.save_image(valid_hr_img, os.path.join(save_dir, 'valid_hr.png'))
+	# tl.vis.save_image(valid_hr_img, os.path.join(save_dir, 'valid_hr.png'))
 
 	out_bicu = scipy.misc.imresize(valid_lr_img[0], [size[0] * 4, size[1] * 4], interp='bicubic', mode=None)
 	tl.vis.save_image(out_bicu, os.path.join(save_dir, 'valid_bicubic.png'))
 
+def evaluate():
+	use_test_folder = True
+	if use_test_folder:
+		filenames = np.array(glob2.glob("Test_images/*.png"))
+		path_ds = tf.data.Dataset.from_tensor_slices(filenames)
+		def _map_fn_test(path):
+			raw_image = tf.io.read_file(path)
+			img = tf.image.decode_jpeg(raw_image,channels=3)
+			img = tf.cast(img, tf.float32)
+			img = tf.image.resize(img, size=[96, 96])
+			img = img / (255. / 2.)
+			img = img - 1.
+			return img
+		ds_lowres = path_ds.map(_map_fn_test, num_parallel_calls=multiprocessing.cpu_count())
+		ds_highres = None
+	else:
+		videoPaths = np.array(glob2.glob(virat.ground.video.dir + '/*.mp4'))
+		generator = videodataset.FrameGenerator(videoPaths, iteration_size=12)
+
+		def _map_fn_train(img):
+			hr_patch = tf.image.random_crop(img, [384, 384, 3])
+			hr_patch = hr_patch / (255. / 2.)
+			hr_patch = hr_patch - 1.
+			lr_patch = tf.image.resize(hr_patch, size=[96, 96])
+			return lr_patch, hr_patch
+		
+		ds_lowres = tf.data.Dataset.from_generator(generator.call, output_types=(tf.float32))
+		ds_highres = tf.data.Dataset.from_generator(generator.call, output_types=(tf.float32))
+		ds_lowres = ds_lowres.map(_map_fn_train, num_parallel_calls=multiprocessing.cpu_count())
+	__evaluate(ds_lowres, ds_highres)
 
 if __name__ == '__main__':
-	import argparse
-	parser = argparse.ArgumentParser()
-
-	parser.add_argument('--mode', type=str, default='srgan', help='srgan, evaluate')
-
-	args = parser.parse_args()
-
 	tl.global_flag['mode'] = args.mode
 
 	if tl.global_flag['mode'] == 'srgan':
@@ -240,5 +241,3 @@ if __name__ == '__main__':
 		evaluate()
 	else:
 		raise Exception("Unknow --mode")
-
-
