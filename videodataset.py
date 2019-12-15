@@ -27,9 +27,10 @@ class FrameGenerator():
 		self.totalFrames = np.array([vid.get(cv2.CAP_PROP_FRAME_COUNT) for vid in self.videos]).astype(np.int)
 		self.iteration_size = iteration_size
 	def call(self):
-		while True:
-			# let's just use the first video for testing:
-			i_vid = 0
+		ind_vid = np.arange(len(self.videos[:-1])) # keep the last as test set
+		# np.random.shuffle(ind_vid)
+		i_vid = 0 # temporary
+		for _ in range(96):
 			vid = self.videos[i_vid]
 			idx_frame = np.random.choice(self.totalFrames[i_vid], self.totalFrames[i_vid], replace=True)
 			for i in range(self.iteration_size):
@@ -39,7 +40,9 @@ class FrameGenerator():
 				# 	'video_path': self.videoPaths[i_vid],
 				# 	'frame': vid.read()[1]
 				# }
-				yield vid.read()[1]
+				img = vid.read()[1]
+				img = cv2.blur(img,(5,5))
+				yield img
 
 if __name__ == "__main__":
 	videoPaths = np.array(glob2.glob(virat.ground.video.dir + '/*.mp4'))
