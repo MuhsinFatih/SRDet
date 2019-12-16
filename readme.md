@@ -7,7 +7,7 @@ VIRAT Dataset: https://data.kitware.com/#collection/56f56db28d777f753209ba9f
 
 ## Usage  
 
-The dataset we are using is approximately 70GB. To download the script, run:
+The dataset we are using is approximately 70GB. To download, run:
 ```bash
 bash download_dataset.sh
 ```
