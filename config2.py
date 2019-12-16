@@ -1,5 +1,8 @@
 import os
 from utils import *
+import sys
+self_dir = os.path.dirname(os.path.realpath(__file__))
+sys.path.append(self_dir)
 
 data_dir = os.path.join(os.path.dirname(__file__), 'data')
 

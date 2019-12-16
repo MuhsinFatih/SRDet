@@ -85,12 +85,12 @@ def get_train_data():
 	generator = videodataset.FrameGenerator(videoPaths, iteration_size)
 
 	def _map_fn_train(img):
-		hr_patch = tf.image.random_crop(img, [384, 384, 3])
+		hr_patch = tf.image.random_crop(img, [384, 384, 3]) # 720, 480, 3
 		hr_patch = hr_patch / (255. / 2.)
 		hr_patch = hr_patch - 1.
 		hr_patch = tf.image.random_flip_left_right(hr_patch)
 		lr_patch = tf.image.resize(hr_patch, size=[inputsize, inputsize]) #64, 48, 36
-		lr_patch = tf.image.resize(lr_patch, size=[96, 96]) # re-upsample if it was lower than this. 96x96 is the input size of the network
+		lr_patch = tf.image.resize(lr_patch, size=[96, 96]) # re-upsample if it was lower than this
 		return lr_patch, hr_patch
 	
 	train_ds = tf.data.Dataset.from_generator(generator.call, output_types=(tf.float32))
@@ -105,11 +105,11 @@ def get_train_data():
 	imsave(os.path.join(outdir,"lowres_example.jpg"), examples[0].numpy())
 	imsave(os.path.join(outdir,"highres_example.jpg"), examples[1].numpy())
 
-		# train_ds = train_ds.repeat(n_epoch_init + n_epoch)
+	# train_ds = train_ds.repeat(n_epoch_init + n_epoch)
 	train_ds = train_ds.shuffle(shuffle_buffer_size)
 	train_ds = train_ds.prefetch(AUTOTUNE)
 	train_ds = train_ds.batch(batch_size)
-		# value = train_ds.make_one_shot_iterator().get_next()
+	# value = train_ds.make_one_shot_iterator().get_next()
 	return train_ds
 
 def train():
