@@ -90,30 +90,8 @@ def _map_fn_downsample(img):
 	return lr_patch, hr_patch
 
 def get_train_data():
-	# load dataset
-	# train_hr_img_list = sorted(tl.files.load_file_list(path=config.TRAIN.hr_img_path, regx='.*.png', printable=False))#[0:20]
-		# train_lr_img_list = sorted(tl.files.load_file_list(path=config.TRAIN.lr_img_path, regx='.*.png', printable=False))
-		# valid_hr_img_list = sorted(tl.files.load_file_list(path=config.VALID.hr_img_path, regx='.*.png', printable=False))
-		# valid_lr_img_list = sorted(tl.files.load_file_list(path=config.VALID.lr_img_path, regx='.*.png', printable=False))
-
-	## If your machine have enough memory, please pre-load the entire train set.
-	# train_hr_imgs = tl.vis.read_images(train_hr_img_list, path=config.TRAIN.hr_img_path, n_threads=32)
-		# for im in train_hr_imgs:
-		#     print(im.shape)
-		# valid_lr_imgs = tl.vis.read_images(valid_lr_img_list, path=config.VALID.lr_img_path, n_threads=32)
-		# for im in valid_lr_imgs:
-		#     print(im.shape)
-		# valid_hr_imgs = tl.vis.read_images(valid_hr_img_list, path=config.VALID.hr_img_path, n_threads=32)
-		# for im in valid_hr_imgs:
-		#     print(im.shape)
-		
-	# dataset API and augmentation
-	# def generator_train():
-	# 	for img in train_hr_imgs:
-	# 		yield img
-
 	videoPaths = np.array(glob2.glob(virat.ground.video.dir + '/*.mp4'))
-	generator = videodataset.FrameGenerator(videoPaths, iteration_size)
+	generator = videodataset.FrameGeneratorInterleaved(videoPaths, iteration_size)
 	
 	train_ds = tf.data.Dataset.from_generator(generator.call, output_types=(tf.float32))
 	# train_ds = tf.data.Dataset.from_generator(generator_train, output_types=(tf.float32))
