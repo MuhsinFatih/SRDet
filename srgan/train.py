@@ -111,7 +111,21 @@ def get_train_data():
 	train_ds = train_ds.prefetch(AUTOTUNE)
 	train_ds = train_ds.batch(batch_size)
 	# value = train_ds.make_one_shot_iterator().get_next()
-	return train_ds
+
+	test_generator = videodataset.FrameGeneratorInterleaved(videoPaths, iteration_size, isTest=True)
+	test_ds = tf.data.Dataset.from_generator(generator.call, output_types=(tf.float32))
+	test_ds = test_ds.map(_map_fn_preprocess, num_parallel_calls=AUTOTUNE)
+	test_ds = test_ds.map(_map_fn_downsample, num_parallel_calls=AUTOTUNE)
+	test_ds = test_ds.prefetch(AUTOTUNE)
+	test_ds = test_ds.batch(batch_size)
+	
+	eval_out_path = os.path.join(save_dir, 'test_folder')
+	filenames = np.array(glob2.glob("Test_images/*.png") + glob2.glob("Test_images/*.jpg"))
+	path_ds = tf.data.Dataset.from_tensor_slices(filenames)
+	sample_ds = path_ds.map(_map_fn_path2img, num_parallel_calls=AUTOTUNE)
+	sample_ds = sample_ds.map(_map_fn_preprocess, num_parallel_calls=AUTOTUNE)
+
+	return train_ds, test_ds, sample_ds
 
 def train():
 	size = [1080, 1920]
@@ -130,7 +144,24 @@ def train():
 	D.train()
 	VGG.train()
 
-	train_ds = get_train_data()
+	train_ds, test_ds, sample_ds = get_train_data()
+
+	sample_folders = ['train_lr', 'train_hr', 'train_gen', 'test_lr', 'test_hr', 'test_gen', 'sample_lr', 'sample_gen']
+	for sample_folder in sample_folders:
+		tl.files.exists_or_mkdir(os.path.join(save_dir, sample_folder))
+	
+	# only take a certain amount of images to save
+	test_lr_patchs, test_hr_patchs = next(iter(test_ds))
+	valid_lr_imgs = []
+	for i,lr_patchs in enumerate(sample_ds):
+		valid_lr_img = lr_patchs.numpy()
+		valid_lr_img = np.asarray(valid_lr_img, dtype=np.float32)
+		valid_lr_img = valid_lr_img[np.newaxis,:,:,:]
+		valid_lr_imgs.append(valid_lr_img)
+		tl.vis.save_images(valid_lr_img, [1,1], os.path.join(save_dir, 'sample_lr', 'sample_lr_img_{}.png'.format(i)))
+
+	tl.vis.save_images(test_lr_patchs.numpy(), [2, 4], os.path.join(save_dir, 'test_lr', 'test_lr.png'))
+	tl.vis.save_images(test_hr_patchs.numpy(), [2, 4], os.path.join(save_dir, 'test_hr', 'test_hr.png'))
 
 	# initialize learning (G)
 	n_step_epoch = round(iteration_size // batch_size)
@@ -147,7 +178,17 @@ def train():
 			print("Epoch: [{}/{}] step: [{}/{}] time: {:.3f}s, mse: {:.3f} ".format(
 				epoch, n_epoch_init, step, n_step_epoch, time.time() - step_time, mse_loss))
 		if (epoch != 0) and (epoch % 10 == 0):
-			tl.vis.save_images(fake_hr_patchs.numpy(), [2, 4], os.path.join(save_dir, 'train_g_init_{}.png'.format(epoch)))
+			# save training result examples
+			tl.vis.save_images(lr_patchs.numpy(), [2, 4], os.path.join(save_dir, 'train_lr', 'train_lr_init_{}.png'.format(epoch)))
+			tl.vis.save_images(hr_patchs.numpy(), [2, 4], os.path.join(save_dir, 'train_hr', 'train_hr_init_{}.png'.format(epoch)))
+			tl.vis.save_images(fake_hr_patchs.numpy(), [2, 4], os.path.join(save_dir, 'train_gen', 'train_gen_init_{}.png'.format(epoch)))
+			# save test results (only save generated, since it's always the same images. Inputs are saved before the training loop)
+			fake_hr_patchs = G(test_lr_patchs)
+			tl.vis.save_images(fake_hr_patchs.numpy(), [2, 4], os.path.join(save_dir, 'test_gen', 'test_gen_init_{}.png'.format(epoch)))
+			# save sample results (only save generated, since it's always the same images. Inputs are saved before the training loop)
+			for i,lr_patchs in enumerate(valid_lr_imgs):
+				fake_hr_patchs = G(lr_patchs)
+				tl.vis.save_images(fake_hr_patchs.numpy(), [1,1], os.path.join(save_dir, 'sample_gen', 'sample_gen_init_{}_img_{}.png'.format(epoch, i)))
 
 	## adversarial learning (G, D)
 	n_step_epoch = round(iteration_size // batch_size)
@@ -184,8 +225,22 @@ def train():
 			print(log)
 
 		if (epoch != 0) and (epoch % 10 == 0):
-			tl.vis.save_images(lr_patchs.numpy(), [2, 4], os.path.join(save_dir, 'inputs_{}.png'.format(epoch)))
-			tl.vis.save_images(fake_patchs.numpy(), [2, 4], os.path.join(save_dir, 'train_g_{}.png'.format(epoch)))
+			# save training result examples
+			tl.vis.save_images(lr_patchs.numpy(), [2, 4], os.path.join(save_dir, 'train_lr', 'train_lr_{}.png'.format(epoch)))
+			tl.vis.save_images(hr_patchs.numpy(), [2, 4], os.path.join(save_dir, 'train_hr', 'train_hr_{}.png'.format(epoch)))
+			tl.vis.save_images(fake_patchs.numpy(), [2, 4], os.path.join(save_dir, 'train_gen', 'train_gen_{}.png'.format(epoch)))
+			# save test results (only save generated, since it's always the same images. Inputs are saved before the training loop)
+			fake_hr_patchs = G(test_lr_patchs)
+			tl.vis.save_images(fake_hr_patchs.numpy(), [2, 4], os.path.join(save_dir, 'test_gen', 'test_gen_{}.png'.format(epoch)))
+			# save sample results (only save generated, since it's always the same images. Inputs are saved before the training loop)
+			# for i,lr_patchs in enumerate(valid_lr_imgs):
+			# 	fake_hr_patchs = G(lr_patchs)
+			# 	tl.vis.save_images(fake_hr_patchs.numpy(), [1,1], os.path.join(save_dir, 'sample_gen', 'sample_gen_init_{}_img_{}.png'.format(epoch, i)))
+
+
+			G.save_weights(os.path.join(checkpoint_dir, f'g_epoch_{epoch}.h5'))
+			D.save_weights(os.path.join(checkpoint_dir, f'd_epoch_{epoch}.h5'))
+
 			G.save_weights(os.path.join(checkpoint_dir, 'g.h5'))
 			D.save_weights(os.path.join(checkpoint_dir, 'd.h5'))
 
