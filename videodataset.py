@@ -28,24 +28,28 @@ def _preprocess_image(feature):
 
 
 class FrameGenerator():
-	def __init__(self, videoPaths, iteration_size):
+	def __init__(self, videoPaths, iteration_size, isTest=False):
 		self.videoPaths = videoPaths
+		print('getting vids')
 		self.videos = [cv2.VideoCapture(path) for path in videoPaths]
 		self.totalFrames = np.array([vid.get(cv2.CAP_PROP_FRAME_COUNT) for vid in self.videos]).astype(np.int)
 		self.iteration_size = iteration_size
 		self.ind_vid = np.arange(len(self.videos[:-1])) # keep the last as test set
 		np.random.seed(0)
 		np.random.shuffle(self.ind_vid)
-		self.i_vid = 0
+		self.isTest = isTest
+		if self.isTest:
+			self.i_vid = -1
+		else:
+			self.i_vid = 0
+
 	def call(self):
 		vid = self.videos[self.i_vid]
-		print(len(self.videos))
 		n_frames = min(self.iteration_size, self.totalFrames[self.i_vid])
 		idx_frame = np.random.choice(self.totalFrames[self.i_vid], n_frames, replace=False) # random n frames that are different than each other
 		idx_frame = sorted(idx_frame) # read in order to reduce latency introduced by random access
-		print('idx_frame: ', idx_frame)
-		for i in range(self.iteration_size):
-			# vid = cv2.VideoCapture(self.videoPaths[self.i_vid])
+		for i in range(n_frames):
+			print('idx:', idx_frame[i], i, len(idx_frame), self.totalFrames[self.i_vid])
 			vid.set(cv2.CAP_PROP_POS_FRAMES, idx_frame[i]) # set video to this frame
 			# yield {
 			# 	'video_index': i_vid,
@@ -55,7 +59,43 @@ class FrameGenerator():
 			img = vid.read()[1]
 			img = cv2.blur(img,(5,5))
 			yield img
-		self.i_vid += 1
+		if not self.isTest:
+			self.i_vid += 1
+
+class FrameGeneratorInterleaved():
+	def __init__(self, videoPaths, iteration_size, isTest=False):
+		self.videoPaths = videoPaths
+		print('getting vids')
+		self.videos = [cv2.VideoCapture(path) for path in videoPaths]
+		self.totalFrames = np.array([vid.get(cv2.CAP_PROP_FRAME_COUNT) for vid in self.videos]).astype(np.int)
+		self.iteration_size = iteration_size
+		self.ind_vid = np.arange(len(self.videos[:-1])) # keep the last as test set
+		np.random.seed(0)
+		np.random.shuffle(self.ind_vid)
+		self.isTest = isTest
+		if self.isTest:
+			self.i_vid = -1
+		else:
+			self.i_vid = 0
+
+	def call(self):
+		vid = self.videos[self.i_vid]
+		n_frames = min(self.iteration_size, self.totalFrames[self.i_vid])
+		idx_frame = np.random.choice(self.totalFrames[self.i_vid], n_frames, replace=False) # random n frames that are different than each other
+		idx_frame = sorted(idx_frame) # read in order to reduce latency introduced by random access
+		for i in range(n_frames):
+			print('idx:', idx_frame[i], i, len(idx_frame), self.totalFrames[self.i_vid])
+			vid.set(cv2.CAP_PROP_POS_FRAMES, idx_frame[i]) # set video to this frame
+			# yield {
+			# 	'video_index': i_vid,
+			# 	'video_path': self.videoPaths[i_vid],
+			# 	'frame': vid.read()[1]
+			# }
+			img = vid.read()[1]
+			img = cv2.blur(img,(5,5))
+			yield img
+		if not self.isTest:
+			self.i_vid += 1
 
 
 if __name__ == "__main__":
