@@ -5,19 +5,19 @@ config = edict()
 config.TRAIN = edict()
 
 ## Adam
-config.TRAIN.batch_size = 8 # [16] use 8 if your GPU memory is small, and use [2, 4] in tl.vis.save_images / use 16 for faster training
+config.TRAIN.batch_size = 4 # [16] use 8 if your GPU memory is small, and use [2, 4] in tl.vis.save_images / use 16 for faster training
 config.TRAIN.lr_init = 1e-4
 config.TRAIN.beta1 = 0.9
 
 ## initialize G
-config.TRAIN.n_epoch_init = 10
+config.TRAIN.n_epoch_init = 20
 # config.TRAIN.lr_decay_init = 0.1
 # config.TRAIN.decay_every_init = int(config.TRAIN.n_epoch_init / 2)
 
 ## adversarial learning (SRGAN)
-config.TRAIN.n_epoch = 300
+config.TRAIN.n_epoch = 100000
 config.TRAIN.lr_decay = 0.1
-config.TRAIN.decay_every = int(config.TRAIN.n_epoch / 2)
+config.TRAIN.decay_every = int(config.TRAIN.n_epoch / 500)
 
 ## train set location
 config.TRAIN.hr_img_path = 'DIV2K/DIV2K_train_HR/'

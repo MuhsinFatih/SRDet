@@ -83,10 +83,26 @@ def _map_fn_preprocess(img):
 	return img
 
 def _map_fn_downsample(img):
-	hr_patch = tf.image.random_crop(img, [384, 384, 3]) # 720, 480, 3
+	hr_patch = tf.image.random_crop(img, [384, 384, 3], seed=0) # 720, 480, 3
 	hr_patch = tf.image.random_flip_left_right(hr_patch)
 	lr_patch = tf.image.resize(hr_patch, size=[inputsize, inputsize]) #64, 48, 36
 	lr_patch = tf.image.resize(lr_patch, size=[96, 96]) # re-upsample if it was lower than this
+	return lr_patch, hr_patch
+
+def _map_fn_downsample_same(img):
+	imgshape = tf.shape(img)
+	lr_patch = tf.image.resize(img, size=[int(imgshape[0]/8), int(imgshape[1]/8)]) # re-upsample if it was lower than this
+	return lr_patch, img
+
+def _map_fn_downsample_centercrop(img):
+	hr_patch = tf.image.crop_to_bounding_box(img,
+		offset_height = int((1080-560)/2),
+		offset_width = int((1920-560)/2),
+		target_height = 560,
+		target_width = 560
+	)
+	lr_patch = tf.image.resize(hr_patch, size=[inputsize, inputsize]) #64, 48, 36
+	lr_patch = tf.image.resize(lr_patch, size=[140, 140]) # re-upsample if it was lower than this
 	return lr_patch, hr_patch
 
 def get_train_data():
@@ -158,10 +174,10 @@ def train():
 		valid_lr_img = np.asarray(valid_lr_img, dtype=np.float32)
 		valid_lr_img = valid_lr_img[np.newaxis,:,:,:]
 		valid_lr_imgs.append(valid_lr_img)
-		tl.vis.save_images(valid_lr_img, [1,1], os.path.join(save_dir, 'sample_lr', 'sample_lr_img_{}.png'.format(i)))
+		tl.vis.save_images(valid_lr_img, [1,1], os.path.join(save_dir, 'sample_lr', 'sample_lr_img_{}.jpg'.format(i)))
 
-	tl.vis.save_images(test_lr_patchs.numpy(), [2, 4], os.path.join(save_dir, 'test_lr', 'test_lr.png'))
-	tl.vis.save_images(test_hr_patchs.numpy(), [2, 4], os.path.join(save_dir, 'test_hr', 'test_hr.png'))
+	tl.vis.save_images(test_lr_patchs.numpy(), [2, 4], os.path.join(save_dir, 'test_lr', 'test_lr.jpg'))
+	tl.vis.save_images(test_hr_patchs.numpy(), [2, 4], os.path.join(save_dir, 'test_hr', 'test_hr.jpg'))
 
 	# initialize learning (G)
 	n_step_epoch = round(iteration_size // batch_size)
@@ -179,16 +195,16 @@ def train():
 				epoch, n_epoch_init, step, n_step_epoch, time.time() - step_time, mse_loss))
 		if (epoch != 0) and (epoch % 10 == 0):
 			# save training result examples
-			tl.vis.save_images(lr_patchs.numpy(), [2, 4], os.path.join(save_dir, 'train_lr', 'train_lr_init_{}.png'.format(epoch)))
-			tl.vis.save_images(hr_patchs.numpy(), [2, 4], os.path.join(save_dir, 'train_hr', 'train_hr_init_{}.png'.format(epoch)))
-			tl.vis.save_images(fake_hr_patchs.numpy(), [2, 4], os.path.join(save_dir, 'train_gen', 'train_gen_init_{}.png'.format(epoch)))
+			tl.vis.save_images(lr_patchs.numpy(), [2, 4], os.path.join(save_dir, 'train_lr', 'train_lr_init_{}.jpg'.format(epoch)))
+			tl.vis.save_images(hr_patchs.numpy(), [2, 4], os.path.join(save_dir, 'train_hr', 'train_hr_init_{}.jpg'.format(epoch)))
+			tl.vis.save_images(fake_hr_patchs.numpy(), [2, 4], os.path.join(save_dir, 'train_gen', 'train_gen_init_{}.jpg'.format(epoch)))
 			# save test results (only save generated, since it's always the same images. Inputs are saved before the training loop)
 			fake_hr_patchs = G(test_lr_patchs)
-			tl.vis.save_images(fake_hr_patchs.numpy(), [2, 4], os.path.join(save_dir, 'test_gen', 'test_gen_init_{}.png'.format(epoch)))
+			tl.vis.save_images(fake_hr_patchs.numpy(), [2, 4], os.path.join(save_dir, 'test_gen', 'test_gen_init_{}.jpg'.format(epoch)))
 			# save sample results (only save generated, since it's always the same images. Inputs are saved before the training loop)
 			for i,lr_patchs in enumerate(valid_lr_imgs):
 				fake_hr_patchs = G(lr_patchs)
-				tl.vis.save_images(fake_hr_patchs.numpy(), [1,1], os.path.join(save_dir, 'sample_gen', 'sample_gen_init_{}_img_{}.png'.format(epoch, i)))
+				tl.vis.save_images(fake_hr_patchs.numpy(), [1,1], os.path.join(save_dir, 'sample_gen', 'sample_gen_init_{}_img_{}.jpg'.format(epoch, i)))
 
 	## adversarial learning (G, D)
 	n_step_epoch = round(iteration_size // batch_size)
@@ -226,16 +242,16 @@ def train():
 
 		if (epoch != 0) and (epoch % 10 == 0):
 			# save training result examples
-			tl.vis.save_images(lr_patchs.numpy(), [2, 4], os.path.join(save_dir, 'train_lr', 'train_lr_{}.png'.format(epoch)))
-			tl.vis.save_images(hr_patchs.numpy(), [2, 4], os.path.join(save_dir, 'train_hr', 'train_hr_{}.png'.format(epoch)))
-			tl.vis.save_images(fake_patchs.numpy(), [2, 4], os.path.join(save_dir, 'train_gen', 'train_gen_{}.png'.format(epoch)))
+			tl.vis.save_images(lr_patchs.numpy(), [2, 4], os.path.join(save_dir, 'train_lr', 'train_lr_{}.jpg'.format(epoch)))
+			tl.vis.save_images(hr_patchs.numpy(), [2, 4], os.path.join(save_dir, 'train_hr', 'train_hr_{}.jpg'.format(epoch)))
+			tl.vis.save_images(fake_patchs.numpy(), [2, 4], os.path.join(save_dir, 'train_gen', 'train_gen_{}.jpg'.format(epoch)))
 			# save test results (only save generated, since it's always the same images. Inputs are saved before the training loop)
 			fake_hr_patchs = G(test_lr_patchs)
-			tl.vis.save_images(fake_hr_patchs.numpy(), [2, 4], os.path.join(save_dir, 'test_gen', 'test_gen_{}.png'.format(epoch)))
+			tl.vis.save_images(fake_hr_patchs.numpy(), [2, 4], os.path.join(save_dir, 'test_gen', 'test_gen_{}.jpg'.format(epoch)))
 			# save sample results (only save generated, since it's always the same images. Inputs are saved before the training loop)
 			# for i,lr_patchs in enumerate(valid_lr_imgs):
 			# 	fake_hr_patchs = G(lr_patchs)
-			# 	tl.vis.save_images(fake_hr_patchs.numpy(), [1,1], os.path.join(save_dir, 'sample_gen', 'sample_gen_init_{}_img_{}.png'.format(epoch, i)))
+			# 	tl.vis.save_images(fake_hr_patchs.numpy(), [1,1], os.path.join(save_dir, 'sample_gen', 'sample_gen_init_{}_img_{}.jpg'.format(epoch, i)))
 
 
 			G.save_weights(os.path.join(checkpoint_dir, f'g_epoch_{epoch}.h5'))
@@ -245,15 +261,17 @@ def train():
 			D.save_weights(os.path.join(checkpoint_dir, 'd.h5'))
 
 
-def __evaluate(ds_lowres, ds_highres, eval_out_path):
+def __evaluate(ds, eval_out_path, filenames=None):
 	G = get_G([1, None, None, 3])
-	G.load_weights(os.path.join(checkpoint_dir, 'g.h5'))
+	G.load_weights(os.path.join(checkpoint_dir, 'g_epoch_540.h5'))
 	G.eval()
+	sample_folders = ['lr', 'hr', 'gen', 'bicubic', 'combined']
+	for sample_folder in sample_folders:
+		tl.files.exists_or_mkdir(os.path.join(eval_out_path, sample_folder))
 
-	for i,valid_lr_img in enumerate(ds_lowres):
+	# for i,(filename, valid_lr_img) in enumerate(zip(filenames, ds)):
+	for i,(valid_lr_img, valid_hr_img) in enumerate(ds):
 		valid_lr_img = valid_lr_img.numpy()
-		tl.vis.save_image(valid_lr_img, os.path.join(eval_out_path, str(i), 'valid_hr.png'))
-
 
 		valid_lr_img = np.asarray(valid_lr_img, dtype=np.float32)
 		valid_lr_img = valid_lr_img[np.newaxis,:,:,:]
@@ -263,17 +281,37 @@ def __evaluate(ds_lowres, ds_highres, eval_out_path):
 
 		print("LR size: %s /  generated HR size: %s" % (size, out.shape))  # LR size: (339, 510, 3) /  gen HR size: (1, 1356, 2040, 3)
 		print("[*] save images")
-		pathlib.Path(os.path.join(eval_out_path, str(i))).mkdir(parents=True, exist_ok=True)
-		tl.vis.save_image(out[0], os.path.join(eval_out_path, str(i), 'valid_gen.png'))
-		tl.vis.save_image(valid_lr_img[0], os.path.join(eval_out_path, str(i), 'valid_lr.png'))
-		# tl.vis.save_image(valid_hr_img, os.path.join(eval_out_path, 'valid_hr.png'))
+		if filenames is None:
+			tl.vis.save_image(out[0], os.path.join(eval_out_path, 'gen', f'valid_gen_{i}.jpg'))
+			tl.vis.save_image(valid_lr_img[0], os.path.join(eval_out_path, 'lr', f'valid_lr_{i}.jpg'))
+			tl.vis.save_image(valid_hr_img, os.path.join(eval_out_path, 'hr', f'valid_hr_{i}.jpg'))
 
-		out_bicu = scipy.misc.imresize(valid_lr_img[0], [size[0] * 4, size[1] * 4], interp='bicubic', mode=None)
-		tl.vis.save_image(out_bicu, os.path.join(eval_out_path, str(i), 'valid_bicubic.png'))
+			out_bicu = scipy.misc.imresize(valid_lr_img[0], [size[0] * 4, size[1] * 4], interp='bicubic', mode=None)
+			tl.vis.save_image(out_bicu, os.path.join(eval_out_path, 'bicubic', f'valid_bicu_{i}.jpg'))
+			# tl.vis.save_images(np.array([valid_lr_img[0], np.array(out_bicu), out[0]]), [1,3], os.path.join(eval_out_path, 'combined', f'valid_bicu_{i}.jpg'))
+		else:
+			tl.vis.save_image(out[0], os.path.join(eval_out_path, 'gen', filename))
+			tl.vis.save_image(valid_lr_img[0], os.path.join(eval_out_path, 'lr', filename))
+			# tl.vis.save_image(valid_hr_img, os.path.join(eval_out_path, 'hr', filename))
 
-def evaluate():
-	size_experiment = False
-	if size_experiment:
+			out_bicu = scipy.misc.imresize(valid_lr_img[0], [size[0] * 4, size[1] * 4], interp='bicubic', mode=None)
+			tl.vis.save_image(out_bicu, os.path.join(eval_out_path, 'bicubic', filename))
+			# tl.vis.save_images(np.array([valid_lr_img[0], np.array(out_bicu), out[0]]), [1,3], os.path.join(eval_out_path, 'combined', f'valid_bicu_{i}.jpg'))
+def other():
+	
+	if 1:
+		train_ds, test_ds, sample_ds = get_train_data()
+		test_ds = test_ds.unbatch()
+		candidate_dir = os.path.join(save_dir, 'handPickCandidates_jpg_new')
+		tl.files.exists_or_mkdir(candidate_dir)
+		test_ds = test_ds.take(1000)
+		__evaluate(test_ds, candidate_dir)
+		# for i, img in enumerate(test_ds.take(500)):
+		# 	tl.vis.save_image(img.numpy(), os.path.join(candidate_dir, f'testimg{i}.jpg'))
+
+
+	
+	if 0: # size experiment
 		eval_out_path = os.path.join(save_dir, 'test_video')
 		videoPaths = np.array(glob2.glob(virat.ground.video.dir + '/*.mp4'))
 		generator = videodataset.FrameGenerator(videoPaths, iteration_size)
@@ -291,7 +329,7 @@ def evaluate():
 			imsave(os.path.join(outdir,"resizetest.jpg"), img.numpy())
 		return
 
-	
+def evaluate():
 	use_test_folder = True
 	if use_test_folder:
 		eval_out_path = os.path.join(save_dir, 'test_folder')
@@ -300,6 +338,7 @@ def evaluate():
 		ds_lowres = path_ds.map(_map_fn_path2img, num_parallel_calls=AUTOTUNE)
 		ds_lowres = ds_lowres.map(_map_fn_preprocess, num_parallel_calls=AUTOTUNE)
 		ds_highres = None
+		filenames = [os.path.basename(name) for name in filenames]
 	else:
 		eval_out_path = os.path.join(save_dir, 'test_video')
 		videoPaths = np.array(glob2.glob(virat.ground.video.dir + '/*.mp4'))
@@ -311,7 +350,7 @@ def evaluate():
 		# downsample to get the lowres dataset
 		ds_lowres = ds_highres.map(_map_fn_downsample, num_parallel_calls=AUTOTUNE)
 		ds_lowres = ds_lowres.map(lambda l, h: l, num_parallel_calls=AUTOTUNE)
-	__evaluate(ds_lowres, ds_highres, eval_out_path)
+	__evaluate(ds_lowres, eval_out_path, filenames)
 
 if __name__ == '__main__':
 	tl.global_flag['mode'] = args.mode
@@ -320,5 +359,7 @@ if __name__ == '__main__':
 		train()
 	elif tl.global_flag['mode'] == 'evaluate':
 		evaluate()
+	elif tl.global_flag['mode'] == 'other':
+		other()
 	else:
 		raise Exception("Unknow --mode")
