@@ -105,8 +105,10 @@ def _map_fn_downsample_centercrop(img):
 	lr_patch = tf.image.resize(lr_patch, size=[140, 140]) # re-upsample if it was lower than this
 	return lr_patch, hr_patch
 
-def get_train_data():
-	videoPaths = np.array(glob2.glob(virat.ground.video.dir + '/*.mp4'))
+def get_train_data(aerial=False):
+	ds_source = virat.aerial if aerial else virat.ground
+	videoPaths = np.array(glob2.glob(ds_source.video.dir + '/*.mp4') + glob2.glob(ds_source.video.dir + '/*.mpg'))
+	# videoPaths = np.array([ds_source.video.dir + '/09152008flight2tape3_9.mpg'])
 	generator = videodataset.FrameGeneratorInterleaved(videoPaths, iteration_size)
 	
 	train_ds = tf.data.Dataset.from_generator(generator.call, output_types=(tf.float32))
@@ -128,10 +130,16 @@ def get_train_data():
 	train_ds = train_ds.batch(batch_size)
 	# value = train_ds.make_one_shot_iterator().get_next()
 
-	test_generator = videodataset.FrameGeneratorInterleaved(videoPaths, iteration_size, isTest=True)
+	if aerial:
+		test_generator = videodataset.FrameGenerator_sequential(videoPaths)
+	else:
+		test_generator = videodataset.FrameGeneratorInterleaved(videoPaths, iteration_size, isTest=True)
 	test_ds = tf.data.Dataset.from_generator(generator.call, output_types=(tf.float32))
 	test_ds = test_ds.map(_map_fn_preprocess, num_parallel_calls=AUTOTUNE)
-	test_ds = test_ds.map(_map_fn_downsample, num_parallel_calls=AUTOTUNE)
+	if aerial:
+		test_ds = test_ds.map(lambda img: (img,img), num_parallel_calls=AUTOTUNE) # lowres = highres
+	else:
+		test_ds = test_ds.map(_map_fn_downsample, num_parallel_calls=AUTOTUNE)
 	test_ds = test_ds.prefetch(AUTOTUNE)
 	test_ds = test_ds.batch(batch_size)
 	
@@ -141,7 +149,10 @@ def get_train_data():
 	sample_ds = path_ds.map(_map_fn_path2img, num_parallel_calls=AUTOTUNE)
 	sample_ds = sample_ds.map(_map_fn_preprocess, num_parallel_calls=AUTOTUNE)
 
-	return train_ds, test_ds, sample_ds
+	if aerial:
+		return None, test_ds, None
+	else:
+		return train_ds, test_ds, sample_ds
 
 def train():
 	size = [1080, 1920]
@@ -263,7 +274,7 @@ def train():
 
 def __evaluate(ds, eval_out_path, filenames=None):
 	G = get_G([1, None, None, 3])
-	G.load_weights(os.path.join(checkpoint_dir, 'g_epoch_540.h5'))
+	G.load_weights(os.path.join(checkpoint_dir, 'g.h5'))
 	G.eval()
 	sample_folders = ['lr', 'hr', 'gen', 'bicubic', 'combined']
 	for sample_folder in sample_folders:
@@ -297,12 +308,12 @@ def __evaluate(ds, eval_out_path, filenames=None):
 			out_bicu = scipy.misc.imresize(valid_lr_img[0], [size[0] * 4, size[1] * 4], interp='bicubic', mode=None)
 			tl.vis.save_image(out_bicu, os.path.join(eval_out_path, 'bicubic', filename))
 			# tl.vis.save_images(np.array([valid_lr_img[0], np.array(out_bicu), out[0]]), [1,3], os.path.join(eval_out_path, 'combined', f'valid_bicu_{i}.jpg'))
-def other():
+def other(aerial=False):
 	
 	if 1:
-		train_ds, test_ds, sample_ds = get_train_data()
+		train_ds, test_ds, sample_ds = get_train_data(aerial=True)
 		test_ds = test_ds.unbatch()
-		candidate_dir = os.path.join(save_dir, 'handPickCandidates_jpg_new')
+		candidate_dir = os.path.join(save_dir, 'aerial')
 		tl.files.exists_or_mkdir(candidate_dir)
 		test_ds = test_ds.take(1000)
 		__evaluate(test_ds, candidate_dir)
@@ -361,5 +372,7 @@ if __name__ == '__main__':
 		evaluate()
 	elif tl.global_flag['mode'] == 'other':
 		other()
+	elif tl.global_flag['mode'] == 'aerial':
+		other(aerial=True)
 	else:
 		raise Exception("Unknow --mode")
