@@ -70,8 +70,11 @@ class FrameGeneratorInterleaved():
 	def __init__(self, videoPaths, iteration_size, isTest=False):
 		self.videoPaths = videoPaths
 		print('getting vids')
-		self.videos = [cv2.VideoCapture(path) for path in videoPaths]
+		self.videos = np.array([cv2.VideoCapture(path) for path in videoPaths])
 		self.totalFrames = np.array([vid.get(cv2.CAP_PROP_FRAME_COUNT) for vid in self.videos]).astype(np.int)
+		self.videos = self.videos[self.totalFrames > 0]
+		self.totalFrames = self.totalFrames[self.totalFrames > 0]
+		
 		self.iteration_size = iteration_size
 		self.ind_vid = np.arange(len(self.videos))
 		np.random.seed(0)
@@ -108,13 +111,14 @@ class FrameGenerator_sequential():
 		print('getting vids')
 		self.videos = [cv2.VideoCapture(path) for path in videoPaths]
 		self.totalFrames = np.array([vid.get(cv2.CAP_PROP_FRAME_COUNT) for vid in self.videos]).astype(np.int)
+		print('self.totalFrames: ', self.totalFrames)
 		self.i_vid = 0
 
 	def call(self):
 		i_vid = self.i_vid
 		vid = self.videos[i_vid]
 		n_frames = self.totalFrames[i_vid]
-		for i in range(n_frames):
+		for i in range(1800, 100000):
 			vid.set(cv2.CAP_PROP_POS_FRAMES, i) # set video to this frame
 			# yield {
 			# 	'video_index': i_vid,
@@ -124,8 +128,7 @@ class FrameGenerator_sequential():
 			img = vid.read()[1]
 			# img = cv2.blur(img,(5,5))
 			yield img
-		if not self.isTest:
-			self.i_vid = (self.i_vid + 1) % n_frames
+		self.i_vid += 1 (self.i_vid + 1) % n_frames
 
 if __name__ == "__main__":
 	videoPaths = np.array(glob2.glob(virat.ground.video.dir + '/*.mp4'))

@@ -83,11 +83,11 @@ def _map_fn_preprocess(img):
 	return img
 
 def _map_fn_downsample(img):
-	hr_patch = tf.image.random_crop(img, [384, 384, 3], seed=0) # 720, 480, 3
+	hr_patch = tf.image.random_crop(img, [150, 150, 3], seed=0) # 720, 480, 3
 	hr_patch = tf.image.random_flip_left_right(hr_patch)
-	lr_patch = tf.image.resize(hr_patch, size=[inputsize, inputsize]) #64, 48, 36
-	lr_patch = tf.image.resize(lr_patch, size=[96, 96]) # re-upsample if it was lower than this
-	return lr_patch, hr_patch
+	# lr_patch = tf.image.resize(hr_patch, size=[inputsize, inputsize]) #64, 48, 36
+	# lr_patch = tf.image.resize(lr_patch, size=[96, 96]) # re-upsample if it was lower than this
+	return hr_patch, hr_patch
 
 def _map_fn_downsample_same(img):
 	imgshape = tf.shape(img)
@@ -107,14 +107,14 @@ def _map_fn_downsample_centercrop(img):
 
 def get_train_data(aerial=False):
 	ds_source = virat.aerial if aerial else virat.ground
+	# if aerial:
+	# 	videoPaths = np.array([ds_source.video.dir + '/09152008flight2tape3_9.m4v'])
+	# else:
 	videoPaths = np.array(glob2.glob(ds_source.video.dir + '/*.mp4') + glob2.glob(ds_source.video.dir + '/*.mpg'))
-	# videoPaths = np.array([ds_source.video.dir + '/09152008flight2tape3_9.mpg'])
+	print('videoPaths: ', videoPaths)
 	generator = videodataset.FrameGeneratorInterleaved(videoPaths, iteration_size)
 	
 	train_ds = tf.data.Dataset.from_generator(generator.call, output_types=(tf.float32))
-	# train_ds = tf.data.Dataset.from_generator(generator_train, output_types=(tf.float32))
-	# print(next(iter(train_ds)).numpy())
-	# return
 	example = next(iter(train_ds))
 	imsave(os.path.join(outdir,"input_example.jpg"), example.numpy())
 	train_ds = train_ds.map(_map_fn_preprocess, num_parallel_calls=AUTOTUNE)
@@ -130,18 +130,18 @@ def get_train_data(aerial=False):
 	train_ds = train_ds.batch(batch_size)
 	# value = train_ds.make_one_shot_iterator().get_next()
 
-	if aerial:
-		test_generator = videodataset.FrameGenerator_sequential(videoPaths)
-	else:
-		test_generator = videodataset.FrameGeneratorInterleaved(videoPaths, iteration_size, isTest=True)
-	test_ds = tf.data.Dataset.from_generator(generator.call, output_types=(tf.float32))
+	# if aerial:
+	# 	test_generator = videodataset.FrameGenerator_sequential(videoPaths)
+	# else:
+	test_generator = videodataset.FrameGeneratorInterleaved(videoPaths, iteration_size, isTest=False)
+	test_ds = tf.data.Dataset.from_generator(test_generator.call, output_types=(tf.float32))
 	test_ds = test_ds.map(_map_fn_preprocess, num_parallel_calls=AUTOTUNE)
-	if aerial:
-		test_ds = test_ds.map(lambda img: (img,img), num_parallel_calls=AUTOTUNE) # lowres = highres
-	else:
-		test_ds = test_ds.map(_map_fn_downsample, num_parallel_calls=AUTOTUNE)
+	# if aerial:
+	# 	test_ds = test_ds.map(lambda img: (img,img), num_parallel_calls=AUTOTUNE) # lowres = highres
+	# else:
+	test_ds = test_ds.map(_map_fn_downsample, num_parallel_calls=AUTOTUNE)
 	test_ds = test_ds.prefetch(AUTOTUNE)
-	test_ds = test_ds.batch(batch_size)
+	# test_ds = test_ds.batch(batch_size)
 	
 	eval_out_path = os.path.join(save_dir, 'test_folder')
 	filenames = np.array(glob2.glob("Test_images/*.png") + glob2.glob("Test_images/*.jpg"))
@@ -312,10 +312,9 @@ def other(aerial=False):
 	
 	if 1:
 		train_ds, test_ds, sample_ds = get_train_data(aerial=True)
-		test_ds = test_ds.unbatch()
-		candidate_dir = os.path.join(save_dir, 'aerial')
+		# test_ds = test_ds.unbatch()
+		candidate_dir = os.path.join(save_dir, 'aerial_candidates')
 		tl.files.exists_or_mkdir(candidate_dir)
-		test_ds = test_ds.take(1000)
 		__evaluate(test_ds, candidate_dir)
 		# for i, img in enumerate(test_ds.take(500)):
 		# 	tl.vis.save_image(img.numpy(), os.path.join(candidate_dir, f'testimg{i}.jpg'))
@@ -341,7 +340,7 @@ def other(aerial=False):
 		return
 
 def evaluate():
-	use_test_folder = True
+	use_test_folder = False
 	if use_test_folder:
 		eval_out_path = os.path.join(save_dir, 'test_folder')
 		filenames = np.array(glob2.glob("Test_images/*.png") + glob2.glob("Test_images/*.jpg"))
@@ -360,7 +359,8 @@ def evaluate():
 
 		# downsample to get the lowres dataset
 		ds_lowres = ds_highres.map(_map_fn_downsample, num_parallel_calls=AUTOTUNE)
-		ds_lowres = ds_lowres.map(lambda l, h: l, num_parallel_calls=AUTOTUNE)
+		filenames = None
+		# ds_lowres = ds_lowres.map(lambda l, h: l, num_parallel_calls=AUTOTUNE)
 	__evaluate(ds_lowres, eval_out_path, filenames)
 
 if __name__ == '__main__':
