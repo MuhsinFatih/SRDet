@@ -1,4 +1,7 @@
 ## CIS 5543 Computer Vision project (in-progress)  
+
+Team Members: Muhsin Fatih & Kshitiz Malhotra
+
 Credits:  
 We use SRGan code from this paper: https://arxiv.org/abs/1609.04802  
 Original code for SRGan: https://github.com/tensorlayer/srgan  
